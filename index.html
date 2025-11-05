@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bijak Sifir</title>
+    <!-- Memuatkan Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Konfigurasi Tailwind untuk fon Inter -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f8ff; 
+            transition: background-color 0.3s;
+        }
+        .objective-button {
+            cursor: pointer;
+        }
+        .objective-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .correct-answer {
+            background-color: #10B981 !important; 
+            color: white !important;
+        }
+        .wrong-answer {
+            background-color: #EF4444 !important; 
+            color: white !important;
+        }
+
+        /* Gaya Khusus untuk Sijil Cetak (Direka untuk muat 1 halaman) */
+        .certificate-box {
+            max-width: 4xl;
+            border: 10px solid #06B6D4; 
+            box-shadow: 0 0 0 10px rgba(6, 182, 212, 0.5);
+            width: 100%;
+            margin: 0 auto;
+            padding: 0; 
+        }
+        
+        @media print {
+            body { background-color: white !important; }
+
+            /* Tetapkan margin untuk halaman kertas */
+            @page {
+                margin: 0.5cm; 
+            }
+            
+            /* Container utama sijil */
+            .certificate-box {
+                border: 4px double #06B6D4 !important; 
+                box-shadow: none !important;
+                width: 100%; 
+                max-width: 100%;
+                margin: 0 !important;
+                padding: 10px !important; /* Padding dalaman di dalam border */
+                display: block !important;
+                height: auto;
+            }
+
+            /* Kandungan keseluruhan sijil: MENOLAK KANDUNGAN KE BAWAH */
+            #cert-content {
+                /* Padding atas dinaikkan secara mendadak untuk memastikan tajuk tidak terpotong */
+                padding: 100px 10px 5px 10px !important; 
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: center !important;
+                justify-content: center !important;
+                font-size: 10pt;
+            }
+            
+            /* Sembunyikan butang kembali manual dalam mod cetakan */
+            #manual-back-button {
+                display: none !important;
+            }
+
+            /* Pelarasan saiz font untuk 1 halaman */
+            .certificate-box h1 { font-size: 1.5rem !important; margin-top: 0 !important; margin-bottom: 0.3rem !important; } 
+            .certificate-box p:nth-of-type(1) { font-size: 0.8rem !important; margin-bottom: 0.3rem !important; } 
+            .certificate-box p:nth-of-type(2) { font-size: 1rem !important; margin-bottom: 0.5rem !important; } 
+            .certificate-box h2 { font-size: 2rem !important; margin-bottom: 0.5rem !important; padding: 0.2rem !important; } 
+            .certificate-box p:nth-of-type(3) { font-size: 1.2rem !important; margin-bottom: 0.8rem !important; } 
+            .certificate-box .score-label { font-size: 0.9rem !important; padding: 0.2rem !important; }
+            .certificate-box .score-value { font-size: 1.8rem !important; } 
+            .certificate-box #cert-datetime { font-size: 1rem !important; margin-bottom: 0.5rem !important; } 
+            .certificate-box .penyelia-text { font-size: 1rem !important; margin-top: 0.5rem !important; margin-bottom: 0.1rem !important; }
+            .certificate-box .italic-text { font-size: 0.7rem !important; margin-bottom: 0 !important; }
+            .certificate-box .quote-akhir { margin-top: 0.5rem !important; margin-bottom: 0 !important; }
+        }
+        /* Loader styles for Firebase readiness */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4" id="app-body">
+    
+    <!-- 1. Main Quiz Container (Visible by default) -->
+    <div id="quiz-container" 
+         class="w-full max-w-xl h-full max-h-[95vh] flex flex-col bg-white p-8 rounded-3xl shadow-2xl border-b-8 border-cyan-500 transform transition-all duration-300 overflow-y-auto">
+
+        <!-- Header -->
+        <h1 class="text-4xl font-extrabold text-center text-cyan-700 mb-0 flex-shrink-0">
+            Bijak Sifir
+        </h1>
+        <!-- Remark Branding -->
+        <p class="text-center text-sm font-semibold text-yellow-600 mb-3 flex-shrink-0">
+            -- Edukids by Mizz --
+        </p>
+        
+        <!-- Firebase Status (Diletakkan di dalam container yang disembunyikan secara visual) -->
+        <div id="db-status-container" class="text-xs text-center text-gray-500 mb-4 border-b pb-2 flex-shrink-0 hidden">
+            <span id="firebase-status" class="flex items-center justify-center font-bold text-red-500">
+                <div class="loader mr-2"></div> Memuatkan pangkalan data...
+            </span>
+            <p id="user-id-display" class="break-all mt-1"></p>
+        </div>
+
+        <p class="text-center text-sm text-gray-500 mb-6 border-b pb-4 flex-shrink-0">
+            30 Soalan Subjektif & 20 Soalan Objektif. Fokus pada ketepatan!
+        </p>
+
+        <!-- Stats Display -->
+        <div id="stats-display" class="flex justify-between items-center text-lg font-bold mb-8 p-4 bg-cyan-50 rounded-xl shadow-inner border border-cyan-200 flex-shrink-0">
+            <div id="score-display" class="text-cyan-800">Skor: 0</div>
+            <div id="question-counter" class="text-gray-600">Soalan: 0/50</div>
+            <div id="percentage-display" class="text-green-700">Peratus: 0%</div>
+        </div>
+        
+        <!-- Quiz Area (Mengambil ruang fleksibel) -->
+        <div id="quiz-area" class="text-center flex-grow flex flex-col justify-center">
+            
+            <!-- Start Screen (Skrin Permulaan dengan Input Nama) -->
+            <div id="start-screen" class="p-4">
+                <form id="start-form" class="flex flex-col gap-5 items-center">
+                    <input type="text" id="participant-name" placeholder="Masukkan Nama Anda" required 
+                           class="w-full p-4 text-xl border-4 border-yellow-300 rounded-xl focus:outline-none focus:border-yellow-500 transition shadow-lg"
+                           maxlength="30">
+                    
+                    <button type="submit" id="start-button-submit" disabled
+                            class="w-full py-6 bg-green-600 text-white text-2xl font-bold rounded-xl hover:bg-green-700 transition duration-150 transform hover:scale-[1.02] shadow-xl hover:shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed">
+                        Mula Kuiz (Menunggu DB...)
+                    </button>
+                </form>
+            </div>
+            
+            <!-- Main Question & Dynamic Input/Options -->
+            <div id="question-box" class="hidden flex flex-col items-center">
+                <p class="text-6xl font-black text-gray-900 mb-8 p-6 bg-yellow-200 rounded-2xl border-4 border-yellow-500 shadow-xl flex-shrink-0">
+                    <span id="question-text"></span>
+                </p>
+
+                <!-- Kawasan untuk Soalan Subjektif (Input Teks) -->
+                <form id="subjective-input-area" class="flex flex-col gap-5 items-center w-full">
+                    <input type="number" id="user-answer" placeholder="Masukkan Jawapan Anda" required 
+                           class="w-full p-5 text-center text-3xl border-4 border-cyan-300 rounded-xl focus:outline-none focus:border-cyan-600 transition shadow-lg hover:shadow-xl"
+                           min="0" pattern="[0-9]*" inputmode="numeric">
+                    
+                    <button type="submit" id="submit-button"
+                            class="w-full py-4 bg-cyan-600 text-white text-xl font-bold rounded-xl hover:bg-cyan-700 transition duration-150 transform hover:scale-[1.02] active:scale-100 shadow-xl hover:shadow-2xl">
+                        Hantar Jawapan
+                    </button>
+                </form>
+
+                <!-- Kawasan untuk Soalan Objektif (Pilihan Butang) -->
+                <div id="objective-options-area" class="grid grid-cols-2 gap-4 w-full mt-4">
+                    <!-- Butang Pilihan Jawapan akan dijana di sini -->
+                </div>
+            </div>
+
+            <!-- Result Display (Hidden initially) -->
+            <div id="result-screen" class="hidden text-center p-8 bg-teal-50 rounded-2xl border-4 border-teal-300 shadow-2xl">
+                <h2 class="text-4xl font-extrabold text-teal-700 mb-4">🎉 Kuiz Tamat! 🎉</h2>
+                <p class="text-2xl font-bold text-gray-900 mb-4">Peserta: <span id="final-name" class="text-cyan-600 font-extrabold text-3xl"></span></p>
+                <p class="text-2xl text-gray-800 mb-2">Skor Akhir: <span id="final-score" class="font-black text-4xl text-red-600"></span> / 50</p>
+                <p class="text-2xl text-gray-800 mb-4">Peratusan: <span id="final-percentage" class="font-black text-4xl text-red-600"></span></p>
+                
+                <div class="p-5 bg-purple-100 rounded-xl my-6 shadow-inner border-2 border-purple-400">
+                    <p class="text-2xl font-bold text-purple-800">Tahap Penguasaan (TP):</p>
+                    <p id="tp-level" class="text-6xl font-black text-purple-700 mt-2 animate-pulse"></p>
+                    <p id="tp-description" class="text-md italic text-purple-700 mt-2"></p>
+                </div>
+                
+                <!-- Butang untuk Sijil dan Sejarah -->
+                <div class="flex flex-col sm:flex-row gap-3 mt-4">
+                    <button id="print-certificate-button"
+                            class="flex-1 py-3 bg-pink-600 text-white text-lg font-bold rounded-xl hover:bg-pink-700 transition duration-150 transform hover:scale-105 shadow-lg">
+                        Cetak Sijil
+                    </button>
+                    <button id="view-history-button"
+                            class="flex-1 py-3 bg-indigo-600 text-white text-lg font-bold rounded-xl hover:bg-indigo-700 transition duration-150 transform hover:scale-105 shadow-lg">
+                        Lihat Sejarah Skor
+                    </button>
+                </div>
+                
+
+                <button id="restart-button"
+                        class="mt-4 w-full py-3 bg-blue-600 text-white text-lg font-bold rounded-xl hover:bg-blue-700 transition duration-150 transform hover:scale-105 shadow-lg">
+                    Cuba Lagi
+                </button>
+            </div>
+            
+            <!-- Score History Modal -->
+            <div id="history-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-80 z-[60] p-4 flex items-center justify-center">
+                <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+                    <h3 class="text-3xl font-bold text-indigo-700 mb-4 border-b pb-2">Sejarah Skor Anda</h3>
+                    <div id="history-list" class="space-y-3">
+                        <!-- Skor akan dimuatkan di sini -->
+                        <p class="text-center text-gray-500 italic">Memuatkan rekod...</p>
+                    </div>
+                    <button id="close-history-button" class="w-full mt-6 py-3 bg-gray-300 text-gray-800 font-bold rounded-lg hover:bg-gray-400 transition">
+                        Tutup
+                    </button>
+                </div>
+            </div>
+
+        </div>
+        
+        <!-- Message Area (Pesan) -->
+        <p id="message" class="mt-6 text-xl font-semibold text-gray-700 min-h-[30px] transition-colors duration-300 flex-shrink-0 text-center">Sila masukkan nama anda untuk memulakan cabaran.</p>
+    </div>
+
+    <!-- 2. Certificate Container (Hidden, for print only) -->
+    <div id="certificate-container-print" class="p-4 fixed top-0 left-0 w-full h-full bg-white z-50 justify-center items-start hidden overflow-y-auto">
+        
+        <!-- Butang Kembali Manual (Hanya kelihatan jika mod cetak dibuka di skrin) -->
+        <button id="manual-back-button"
+                class="fixed top-4 right-4 z-[70] py-2 px-4 bg-red-600 text-white font-bold rounded-xl shadow-lg hover:bg-red-700 transition hidden">
+            &larr; Kembali ke Keputusan
+        </button>
+
+        <div class="certificate-box w-full max-w-4xl mx-auto text-center shadow-2xl rounded-xl mt-10"
+             style="background-color: #f7feff;">
+            
+            <!-- === KANDUNGAN SIJIL SATU HALAMAN === -->
+            <div id="cert-content" class="p-10 flex flex-col items-center">
+                <h1 class="text-4xl sm:text-5xl font-extrabold text-red-600 mb-2">SIJIL PENCAPAIAN BIJAK SIFIR</h1>
+                <p class="text-base sm:text-xl font-semibold text-cyan-700 mb-6"> 
+                    Dipersembahkan oleh: **Edukids by Mizz**
+                </p>
+
+                <p class="text-2xl sm:text-3xl font-light text-gray-800 mb-4">
+                    Dengan sukacitanya, sijil ini dianugerahkan kepada:
+                </p>
+
+                <h2 id="cert-name" class="text-6xl sm:text-7xl font-black text-purple-700 uppercase mb-8 border-b-4 border-purple-300 p-2">
+                    [NAMA PESERTA]
+                </h2>
+
+                <p class="text-2xl sm:text-3xl font-medium text-gray-800 mb-6">
+                    Atas pencapaian cemerlang dalam **KUIZ BIJAK SIFIR 50 SOALAN**
+                </p>
+                
+                <!-- Bahagian Skor dan Peratusan -->
+                <div class="flex justify-center gap-8 sm:gap-12 mb-8 score-box">
+                    <div class="p-3 sm:p-4 bg-yellow-100 rounded-lg shadow-md border-2 border-yellow-400">
+                        <p class="text-lg sm:text-xl font-semibold text-gray-700 score-label">Skor Dicapai:</p>
+                        <p id="cert-score" class="text-3xl sm:text-4xl font-extrabold text-red-600 score-value">-- / 50</p>
+                    </div>
+                    <div class="p-3 sm:p-4 bg-lime-100 rounded-lg shadow-md border-2 border-lime-400">
+                        <p class="text-lg sm:text-xl font-semibold text-gray-700 score-label">Peratusan:</p>
+                        <p id="cert-percent" class="text-3xl sm:text-4xl font-extrabold text-green-600 score-value">-- %</p>
+                    </div>
+                </div>
+
+                <!-- Bahagian Tarikh/Masa dan Tandatangan -->
+                <div id="cert-datetime-div" class="w-full flex flex-col items-center justify-center pt-4 pb-0"> 
+                    <p class="text-lg font-light text-gray-600 mb-2 penyelia-text">
+                        Diperakui sebagai Master Sifir:
+                    </p>
+                    <!-- Tarikh dan Masa -->
+                    <p id="cert-datetime" class="text-xl sm:text-2xl font-bold text-gray-800 mb-4"> 
+                        [TARIKH & MASA]
+                    </p>
+                    
+                    <p class="text-lg font-semibold text-cyan-600 mt-4 penyelia-text">Mizz</p>
+                    <p class="text-sm italic text-gray-500 mb-2 italic-text">Penyelia Edukids by Mizz</p>
+                </div>
+                
+                <!-- Quote Terakhir -->
+                <p class="text-sm italic text-gray-400 quote-akhir mt-8"> 
+                    "Kejayaan adalah hasil daripada usaha yang konsisten."
+                </p>
+            </div>
+            
+        </div>
+    </div>
+
+    <script type="module">
+        // --- FIREBASE IMPORTS ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, orderBy, getDocs, Timestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Tetapkan tahap log untuk debugging
+        setLogLevel('Debug');
+
+        // --- GLOBAL STATE & FIREBASE INIT ---
+        let app, db, auth;
+        let userId = null;
+        let isFirebaseReady = false;
+
+        // Variables global environment (MANDATORY)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        const getScoreCollectionRef = (uid) => collection(db, 'artifacts', appId, 'users', uid, 'quiz_scores');
+
+        async function initializeFirebase() {
+            try {
+                if (Object.keys(firebaseConfig).length === 0) {
+                    console.warn("Firebase config is missing. App running without score history.");
+                    isFirebaseReady = true; 
+                    document.getElementById('start-button-submit').disabled = false;
+                    document.getElementById('start-button-submit').textContent = 'Mula Kuiz (50 Soalan)';
+                    document.getElementById('firebase-status').innerHTML = '<span class="text-orange-600">MOD LUAR TALIAN. Skor tidak disimpan.</span>';
+                    // Sembunyikan butang sejarah jika tiada DB
+                    document.getElementById('view-history-button').classList.add('hidden');
+                    return; 
+                }
+
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                // 1. Authentication
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                // 2. Auth State Listener to set UID
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        isFirebaseReady = true;
+                        document.getElementById('user-id-display').textContent = `ID Pengguna: ${userId}`;
+                        document.getElementById('firebase-status').innerHTML = '<span class="text-green-600">Terhubung ke Pangkalan Data.</span>';
+                        document.getElementById('start-button-submit').disabled = false;
+                        document.getElementById('start-button-submit').textContent = 'Mula Kuiz (50 Soalan)';
+                        console.log("Firebase initialized. User ID:", userId);
+                    } else {
+                        userId = crypto.randomUUID(); 
+                        isFirebaseReady = true;
+                        document.getElementById('user-id-display').textContent = `ID Lokal: ${userId}`;
+                        document.getElementById('firebase-status').innerHTML = '<span class="text-yellow-600">Gagal log masuk. Skor mungkin tidak disimpan.</span>';
+                        document.getElementById('start-button-submit').disabled = false;
+                        document.getElementById('start-button-submit').textContent = 'Mula Kuiz (50 Soalan)';
+                        console.log("Firebase initialized. Anonymous/Local ID used.");
+                    }
+                });
+
+            } catch (error) {
+                console.error("FIREBASE INIT ERROR:", error);
+                document.getElementById('firebase-status').innerHTML = '<span class="text-red-600">RALAT: Gagal sambung ke DB.</span>';
+                isFirebaseReady = false; 
+                document.getElementById('start-button-submit').disabled = true;
+            }
+        }
+        
+        // Fungsi untuk menyimpan skor ke Firestore
+        async function saveScore(score, name, percentage) {
+            if (!isFirebaseReady || !userId) {
+                console.warn("Firebase not ready or user ID missing. Score not saved.");
+                return;
+            }
+            try {
+                const docRef = await addDoc(getScoreCollectionRef(userId), {
+                    score: score,
+                    totalQuestions: TOTAL_QUESTIONS,
+                    percentage: percentage,
+                    participantName: name,
+                    timestamp: Timestamp.now()
+                });
+                console.log("Skor berjaya disimpan dengan ID:", docRef.id);
+            } catch (e) {
+                console.error("Ralat menyimpan skor: ", e);
+            }
+        }
+        
+        // Fungsi untuk memuatkan dan memaparkan sejarah skor
+        async function loadHistory() {
+            if (!isFirebaseReady || !userId) {
+                document.getElementById('history-list').innerHTML = '<p class="text-center text-red-500">Pangkalan data tidak tersedia.</p>';
+                return;
+            }
+
+            const historyListEl = document.getElementById('history-list');
+            historyListEl.innerHTML = '<p class="text-center text-indigo-500 italic">Memuatkan rekod...</p>';
+
+            try {
+                // Fetch skor, susun mengikut tarikh terkini (descending)
+                const q = query(getScoreCollectionRef(userId), orderBy("timestamp", "desc"));
+                const querySnapshot = await getDocs(q);
+                
+                if (querySnapshot.empty) {
+                    historyListEl.innerHTML = '<p class="text-center text-gray-500">Tiada rekod skor ditemui.</p>';
+                    return;
+                }
+
+                historyListEl.innerHTML = ''; 
+                
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    const date = data.timestamp ? data.timestamp.toDate().toLocaleString('ms-MY', {
+                        year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                    }) : 'N/A';
+
+                    const scoreItem = `
+                        <div class="p-3 bg-indigo-50 border-l-4 border-indigo-500 rounded-lg shadow-sm">
+                            <p class="font-bold text-lg text-indigo-900">${data.participantName}</p>
+                            <div class="flex justify-between text-sm mt-1">
+                                <span class="text-gray-700">Skor: <span class="font-extrabold text-red-600">${data.score}/${data.totalQuestions}</span></span>
+                                <span class="text-gray-700">Peratus: <span class="font-extrabold text-green-600">${data.percentage.toFixed(1)}%</span></span>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">Masa: ${date}</p>
+                        </div>
+                    `;
+                    historyListEl.innerHTML += scoreItem;
+                });
+
+            } catch (error) {
+                console.error("Ralat memuatkan sejarah:", error);
+                historyListEl.innerHTML = '<p class="text-center text-red-500">Gagal memuatkan data sejarah. (Perlu sambungan internet)</p>';
+            }
+        }
+
+
+        // --- LOGIK KUANTITI & UTILITI YANG SEDIA ADA ---
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+
+        function playTone(frequency, duration, type = 'sine') {
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.type = type;
+            oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+            gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + duration);
+        }
+
+        function playStartSound() {
+            playTone(220, 0.5, 'triangle');
+            setTimeout(() => playTone(330, 0.5, 'triangle'), 50);
+        }
+
+        function playCorrectSound() {
+            playTone(880, 0.1, 'sine');
+        }
+
+        function playWrongSound() {
+            playTone(150, 0.1, 'square');
+            setTimeout(() => playTone(100, 0.1, 'square'), 50);
+        }
+        
+        const TOTAL_QUESTIONS = 50;
+        const SUBJECTIVE_COUNT = 30;
+        let questions = [];
+        let currentQuestionIndex = 0;
+        let score = 0;
+        let isQuizRunning = false;
+        let isAwaitingNextQuestion = false;
+        let participantName = '';
+        let quizEndTime = null; 
+        
+        // --- Rujukan DOM ---
+        const appBody = document.getElementById('app-body');
+        const quizContainer = document.getElementById('quiz-container');
+        const startScreen = document.getElementById('start-screen');
+        const startForm = document.getElementById('start-form');
+        const participantNameInput = document.getElementById('participant-name');
+        const restartButton = document.getElementById('restart-button');
+        const printCertificateButton = document.getElementById('print-certificate-button'); 
+        const viewHistoryButton = document.getElementById('view-history-button'); 
+        const historyModal = document.getElementById('history-modal'); 
+        const closeHistoryButton = document.getElementById('close-history-button'); 
+        const questionBox = document.getElementById('question-box');
+        const resultScreen = document.getElementById('result-screen');
+        const messageDisplay = document.getElementById('message');
+        const questionTextEl = document.getElementById('question-text');
+        const subjectiveInputArea = document.getElementById('subjective-input-area');
+        const objectiveOptionsArea = document.getElementById('objective-options-area');
+        const userAnswerEl = document.getElementById('user-answer');
+        const submitButton = document.getElementById('submit-button');
+        const answerForm = document.getElementById('subjective-input-area'); 
+        const scoreDisplay = document.getElementById('score-display');
+        const percentageDisplay = document.getElementById('percentage-display');
+        const questionCounter = document.getElementById('question-counter');
+        const finalNameEl = document.getElementById('final-name');
+
+        // Certificate Elements
+        const certNameEl = document.getElementById('cert-name');
+        const certScoreEl = document.getElementById('cert-score');
+        const certPercentEl = document.getElementById('cert-percent');
+        const certDateTimeEl = document.getElementById('cert-datetime');
+        const certPrintContainer = document.getElementById('certificate-container-print');
+        const manualBackButton = document.getElementById('manual-back-button'); // BUTANG BARU
+
+
+        // --- Fungsi Bantuan ---
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+        
+        function generateDistractor(correctAnswer, factor1, factor2, existingAnswers) {
+            let distractor;
+            let attempts = 0;
+            const variation = [factor1, factor2, 1, 2, 3];
+            
+            do {
+                const modifier = variation[Math.floor(Math.random() * variation.length)];
+                if (Math.random() > 0.5) {
+                    distractor = correctAnswer + modifier;
+                } else {
+                    distractor = correctAnswer - modifier;
+                }
+                
+                if (distractor < 1) distractor = correctAnswer + 1;
+                attempts++;
+
+            } while (existingAnswers.includes(distractor) && attempts < 10);
+
+            if (attempts === 10) {
+                distractor = Math.floor(Math.random() * (144 - 10) + 10);
+                if (existingAnswers.includes(distractor)) distractor += 1;
+            }
+            
+            return distractor;
+        }
+
+        /** Menjana set soalan rawak. */
+        function generateQuestions() {
+            questions = [];
+            
+            // 1. Jana 30 Soalan Subjektif
+            for (let i = 0; i < SUBJECTIVE_COUNT; i++) {
+                const f1 = Math.floor(Math.random() * 12) + 1;
+                const f2 = Math.floor(Math.random() * 12) + 1;
+                questions.push({
+                    type: 'subjective',
+                    questionText: `${f1} &times; ${f2} = ?`,
+                    answer: f1 * f2
+                });
+            }
+
+            // 2. Jana 20 Soalan Objektif
+            for (let i = 0; i < TOTAL_QUESTIONS - SUBJECTIVE_COUNT; i++) {
+                const f1 = Math.floor(Math.random() * 12) + 1;
+                const f2 = Math.floor(Math.random() * 12) + 1;
+                const correctAnswer = f1 * f2;
+                
+                let options = [correctAnswer];
+                
+                while (options.length < 4) {
+                    const distractor = generateDistractor(correctAnswer, f1, f2, options);
+                    if (!options.includes(distractor)) {
+                        options.push(distractor);
+                    }
+                }
+                
+                shuffleArray(options); 
+                
+                questions.push({
+                    type: 'objective',
+                    questionText: `${f1} &times; ${f2} = ?`,
+                    options: options,
+                    correctAnswer: correctAnswer
+                });
+            }
+
+            shuffleArray(questions);
+        }
+
+        // --- Logik Kuiz ---
+
+        function startQuiz(event) {
+            event.preventDefault(); 
+            
+            if (!document.getElementById('start-button-submit').disabled && isFirebaseReady) {
+                // Sambung logik
+            } else if (!isFirebaseReady) {
+                messageDisplay.textContent = 'Sila tunggu pangkalan data sedia atau cuba muat semula halaman.';
+                messageDisplay.classList.add('text-red-600');
+                return;
+            }
+
+            const name = participantNameInput.value.trim();
+            if (name === "") {
+                messageDisplay.textContent = 'Sila masukkan nama anda untuk bermula.';
+                messageDisplay.classList.add('text-red-600');
+                return;
+            }
+            
+            participantName = name;
+            
+            if (isQuizRunning) return;
+            
+            isQuizRunning = true;
+            score = 0;
+            currentQuestionIndex = 0;
+            isAwaitingNextQuestion = false;
+            quizEndTime = null;
+            generateQuestions();
+            
+            startScreen.classList.add('hidden');
+            resultScreen.classList.add('hidden');
+            questionBox.classList.remove('hidden');
+            messageDisplay.textContent = `Selamat datang, ${participantName}! Jawab dengan teliti.`;
+            messageDisplay.classList.remove('text-red-600');
+            
+            playStartSound();
+            nextQuestion();
+        }
+
+        function nextQuestion() {
+            isAwaitingNextQuestion = false;
+            userAnswerEl.value = '';
+            userAnswerEl.focus();
+            
+            if (currentQuestionIndex >= TOTAL_QUESTIONS) {
+                endQuiz();
+                return;
+            }
+
+            const currentQ = questions[currentQuestionIndex];
+            questionTextEl.innerHTML = currentQ.questionText;
+            
+            if (currentQ.type === 'subjective') {
+                subjectiveInputArea.classList.remove('hidden');
+                objectiveOptionsArea.classList.add('hidden');
+                userAnswerEl.disabled = false;
+                submitButton.disabled = false;
+            } else { 
+                subjectiveInputArea.classList.add('hidden');
+                objectiveOptionsArea.classList.remove('hidden');
+                renderObjectiveOptions(currentQ);
+            }
+            
+            updateStats();
+        }
+
+        function renderObjectiveOptions(q) {
+            objectiveOptionsArea.innerHTML = '';
+            const labels = ['A', 'B', 'C', 'D'];
+
+            q.options.forEach((option, index) => {
+                const button = document.createElement('button');
+                button.classList.add('objective-button', 'py-4', 'bg-yellow-500', 'text-gray-900', 'text-2xl', 'font-bold', 'rounded-xl', 'hover:bg-yellow-600', 'transition', 'duration-150', 'transform', 'hover:scale-[1.02]', 'shadow-lg');
+                button.textContent = `${labels[index]}. ${option}`;
+                button.setAttribute('data-answer', option); 
+                
+                button.addEventListener('click', (e) => {
+                    e.preventDefault(); 
+                    handleObjectiveAnswer(option, q.correctAnswer, button);
+                });
+                objectiveOptionsArea.appendChild(button);
+            });
+        }
+        
+        function handleSubjectiveAnswer(event) {
+            event.preventDefault();
+            
+            if (isAwaitingNextQuestion) return; 
+            
+            const userAnswer = parseInt(userAnswerEl.value);
+            const currentQ = questions[currentQuestionIndex];
+            
+            if (isNaN(userAnswer)) {
+                messageDisplay.textContent = 'Sila masukkan nombor yang sah.';
+                return;
+            }
+
+            userAnswerEl.disabled = true;
+            submitButton.disabled = true;
+
+            checkAnswer(userAnswer, currentQ.answer);
+        }
+
+        function handleObjectiveAnswer(userAnswer, correctAnswer, clickedButton) {
+            if (isAwaitingNextQuestion) return; 
+            
+            document.querySelectorAll('.objective-button').forEach(btn => btn.disabled = true);
+
+            checkAnswer(userAnswer, correctAnswer, clickedButton);
+        }
+
+        function checkAnswer(userAnswer, correctAnswer, clickedButton = null) {
+            isAwaitingNextQuestion = true;
+            
+            let isCorrect = (parseInt(userAnswer) === correctAnswer);
+
+            if (isCorrect) {
+                score++;
+                messageDisplay.textContent = '✅ BETUL! Hebat!';
+                messageDisplay.classList.add('text-green-600');
+                playCorrectSound();
+                if (clickedButton) clickedButton.classList.add('correct-answer');
+            } else {
+                messageDisplay.textContent = `❌ SALAH! Jawapan betul: ${correctAnswer}.`;
+                messageDisplay.classList.add('text-red-600');
+                playWrongSound();
+                if (clickedButton) {
+                    clickedButton.classList.add('wrong-answer');
+                    document.querySelectorAll('.objective-button').forEach(btn => {
+                        if (parseInt(btn.getAttribute('data-answer')) === correctAnswer) {
+                            btn.classList.add('correct-answer');
+                        }
+                    });
+                }
+            }
+            
+            messageDisplay.classList.remove('text-gray-700');
+            
+            currentQuestionIndex++;
+            updateStats();
+            
+            setTimeout(() => {
+                messageDisplay.classList.remove('text-red-600', 'text-green-600');
+                messageDisplay.classList.add('text-gray-700');
+                nextQuestion();
+            }, 1500); 
+        }
+
+        function updateStats() {
+            const currentQNum = Math.min(currentQuestionIndex, TOTAL_QUESTIONS);
+            const percentage = currentQNum > 0 ? ((score / currentQNum) * 100) : 0;
+            const percentageStr = `${percentage.toFixed(1)}%`;
+            
+            scoreDisplay.textContent = `Skor: ${score}`;
+            questionCounter.textContent = `Soalan: ${currentQNum}/${TOTAL_QUESTIONS}`;
+            percentageDisplay.textContent = `Peratus: ${percentageStr}`;
+        }
+
+        function endQuiz() {
+            isQuizRunning = false;
+            quizEndTime = new Date(); 
+            questionBox.classList.add('hidden');
+            resultScreen.classList.remove('hidden');
+            messageDisplay.textContent = 'Sila lihat keputusan muktamad anda!';
+
+            const finalPercentage = ((score / TOTAL_QUESTIONS) * 100);
+            const finalPercentageStr = `${finalPercentage.toFixed(1)}%`;
+            
+            const dateStr = quizEndTime.toLocaleDateString('ms-MY', { 
+                year: 'numeric', month: 'long', day: 'numeric' 
+            });
+            const timeStr = quizEndTime.toLocaleTimeString('ms-MY', {
+                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+            });
+            const dateTimeStr = `Tarikh: ${dateStr} | Masa: ${timeStr}`;
+
+            // Simpan skor ke Firestore
+            saveScore(score, participantName, finalPercentage);
+
+
+            // 1. Paparkan nama peserta dan skor pada skrin keputusan
+            document.getElementById('final-name').textContent = participantName;
+            document.getElementById('final-score').textContent = score;
+            document.getElementById('final-percentage').textContent = finalPercentageStr;
+            
+            // 2. Kemaskini kandungan sijil untuk dicetak
+            certNameEl.textContent = participantName.toUpperCase();
+            certScoreEl.textContent = `${score} / 50`;
+            certPercentEl.textContent = finalPercentageStr;
+            certDateTimeEl.textContent = dateTimeStr; 
+
+
+            // 3. Penentuan Tahap Penguasaan (TP)
+            let tpLevel, tpDesc;
+            
+            if (finalPercentage >= 96) {
+                tpLevel = 'TP6';
+                tpDesc = 'Cemerlang! Mahir dan boleh menjadi pembimbing. Anda adalah Master Sifir!';
+            } else if (finalPercentage >= 86) {
+                tpLevel = 'TP5';
+                tpDesc = 'Sangat Baik! Menguasai dengan yakin dan konsisten. Kekalkan momentum.';
+            } else if (finalPercentage >= 71) {
+                tpLevel = 'TP4';
+                tpDesc = 'Baik! Berupaya menjawab soalan yang lebih kompleks. Fokus pada ketepatan.';
+            } else if (finalPercentage >= 51) {
+                tpLevel = 'TP3';
+                tpDesc = 'Memuaskan! Menguasai asas, perlu latihan intensif.';
+            } else if (finalPercentage >= 31) {
+                tpLevel = 'TP2';
+                tpDesc = 'Belum Menguasai! Memerlukan bimbingan untuk kemahiran asas. Cuba lagi!';
+            } else {
+                tpLevel = 'TP1';
+                tpDesc = 'Sangat Kurang! Memerlukan sokongan dan intervensi yang kuat. Jangan putus asa!';
+            }
+            
+            document.getElementById('tp-level').textContent = tpLevel;
+            document.getElementById('tp-description').textContent = tpDesc;
+        }
+
+        // Fungsi yang mengendalikan proses kembali
+        function manualBackFromCertificate() {
+            certPrintContainer.classList.add('hidden');
+            quizContainer.classList.remove('hidden'); 
+            resultScreen.classList.remove('hidden'); 
+            questionBox.classList.add('hidden'); 
+            appBody.style.justifyContent = 'center'; 
+            appBody.style.backgroundColor = '#f0f8ff'; 
+            manualBackButton.classList.add('hidden'); // Sembunyikan butang kembali manual
+        }
+
+        // FUNGSI UNTUK MENCETAK SIJIL
+        function printCertificate() {
+            // 1. Sembunyikan Kuiz utama
+            quizContainer.classList.add('hidden');
+            appBody.style.justifyContent = 'flex-start'; 
+            appBody.style.backgroundColor = 'white'; 
+            
+            // 2. Paparkan Sijil Cetak dan butang kembali manual (jika onafterprint gagal)
+            certPrintContainer.classList.remove('hidden');
+            certPrintContainer.style.display = 'flex';
+            manualBackButton.classList.remove('hidden'); // Paparkan butang kembali manual
+
+            // 3. Panggil dialog cetak
+            window.print();
+            
+            // Logik kembali kini dikendalikan oleh window.onafterprint
+        }
+
+        // <<< LOGIK BARU UNTUK KEMBALI KE HALAMAN SEBELUMNYA SECARA AUTOMATIK >>>
+        window.onafterprint = function() {
+            // Panggil fungsi kembali selepas dialog cetak ditutup
+            manualBackFromCertificate();
+        };
+        
+        function openHistoryModal() { 
+            historyModal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+            loadHistory();
+        }
+
+        function closeHistoryModal() { 
+            historyModal.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+        }
+
+
+        // --- Event Listeners ---
+        startForm.addEventListener('submit', startQuiz); 
+        
+        restartButton.addEventListener('click', () => {
+            document.getElementById('result-screen').classList.add('hidden');
+            startScreen.classList.remove('hidden'); 
+            participantNameInput.value = participantName; 
+            messageDisplay.textContent = 'Sila masukkan nama anda untuk memulakan cabaran.';
+            updateStats();
+        });
+
+        printCertificateButton.addEventListener('click', printCertificate); 
+        viewHistoryButton.addEventListener('click', openHistoryModal); 
+        closeHistoryButton.addEventListener('click', closeHistoryModal); 
+        manualBackButton.addEventListener('click', manualBackFromCertificate); // Listener untuk butang kembali manual
+        
+        answerForm.addEventListener('submit', handleSubjectiveAnswer); 
+        
+        userAnswerEl.addEventListener('input', function() {
+            if (this.value < 0) {
+                this.value = 0;
+            }
+        });
+
+        // Tetapkan statistik awal
+        updateStats();
+
+        // Mulakan Firebase selepas skrip utama dimuat
+        initializeFirebase();
+
+    </script>
+</body>
+</html>
